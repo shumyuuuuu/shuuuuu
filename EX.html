@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="theme-color" content="#f5f7f4">
+	<title>OWASP LLM Top 10｜模型安全中心</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			color-scheme: light;
+			--ink: #172a24;
+			--muted: #78837d;
+			--line: #e6eae5;
+			--paper: #ffffff;
+			--canvas: #f5f7f4;
+			--green: #236b4d;
+			--green-dark: #184c38;
+			--green-pale: #eaf3ed;
+			--lime: #d8ed71;
+			--red: #c85d52;
+			--shadow: 0 18px 50px rgba(30, 52, 42, .08);
+		}
+		* { box-sizing: border-box; }
+		.app[hidden] { display: none; }
+		body {
+			margin: 0;
+			min-width: 320px;
+			height: 100vh;
+			overflow: hidden;
+			background: var(--canvas);
+			color: var(--ink);
+			font-family: "DM Sans", "Noto Sans TC", sans-serif;
+			font-size: 14px;
+		}
+		button, input, textarea { font: inherit; }
+		button { color: inherit; }
+		.app { display: grid; grid-template-columns: minmax(0, 1fr); height: 100vh; }
+		.sidebar {
+			position: fixed;
+			inset: 0 auto 0 0;
+			z-index: 5;
+			display: flex;
+			flex-direction: column;
+			width: min(300px, 86vw);
+			min-height: 0;
+			overflow-y: auto;
+			padding: 23px 17px;
+			border-right: 1px solid var(--line);
+			background: #fbfcfa;
+			box-shadow: 12px 0 32px rgba(18,39,27,.12);
+			transform: translateX(-105%);
+			transition: transform .22s ease;
+			scrollbar-color: #d5ded6 transparent;
+			scrollbar-width: thin;
+		}
+		.sidebar.open { transform: translateX(0); }
+		.brand { display: flex; align-items: center; gap: 10px; padding: 1px 9px 27px; }
+		.brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: var(--green-dark); color: var(--lime); }
+		.brand-mark svg { width: 19px; height: 19px; }
+		.brand-name { font-size: 15px; font-weight: 700; letter-spacing: 0; }
+		.brand-caption { margin-top: 1px; color: #8a948e; font-size: 10px; letter-spacing: .4px; }
+		.new-chat {
+			display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 42px;
+			border: 1px solid #dce6de; border-radius: 8px; background: #fff; font-weight: 600; cursor: pointer;
+			transition: background .18s, border-color .18s, transform .18s;
+		}
+		.new-chat:hover { border-color: #9dbba7; background: #f4f8f4; transform: translateY(-1px); }
+		.new-chat svg, .side-link svg { width: 17px; height: 17px; flex: none; }
+		.side-section { margin-top: 29px; }
+		.section-label { padding: 0 9px; color: #929b95; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+		.side-nav { display: grid; gap: 4px; margin-top: 10px; }
+		.side-link {
+			display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0;
+			border-radius: 7px; background: transparent; color: #67736c; text-align: left; cursor: pointer;
+		}
+		.side-link:hover { background: #f0f4f0; color: var(--ink); }
+		.side-link.active { background: var(--green-pale); color: var(--green-dark); font-weight: 600; }
+		.history { display: grid; gap: 3px; margin-top: 9px; }
+		.history button { overflow: hidden; padding: 9px 10px; border: 0; border-radius: 7px; background: transparent; color: #66726b; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+		.history button:hover, .history button.selected { background: #f0f3ef; color: var(--ink); }
+		.history .history-date { padding: 12px 10px 4px; color: #a0a8a2; font-size: 10px; }
+		.sidebar-spacer { display: none; }
+		.workspace { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+		.topbar { display: flex; height: 66px; flex: none; align-items: center; justify-content: space-between; padding: 0 31px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.84); }
+		.top-left { display: flex; align-items: center; gap: 12px; }
+		.mobile-menu { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; }
+		.mobile-menu:hover { background: #f4f7f3; }
+		.mobile-menu svg { width: 18px; height: 18px; }
+		.breadcrumb { color: #909a93; font-size: 12px; }
+		.breadcrumb strong { color: #35473e; font-weight: 600; }
+		.top-actions { display: flex; align-items: center; gap: 10px; }
+		.market-status { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 20px; background: #fff; color: #66736b; font-size: 11px; }
+		.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #63a87b; box-shadow: 0 0 0 3px #e8f4eb; }
+		.icon-button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; }
+		.icon-button:hover { background: #f4f7f3; }
+		.icon-button svg { width: 16px; height: 16px; }
+		.main-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); padding: 22px 28px 18px; }
+		.chat-column { display: flex; min-width: 0; min-height: 0; flex-direction: column; align-items: center; }
+		.chat-heading { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 13px; padding: 6px 2px 13px; border-bottom: 1px solid #e2e9e2; }
+		.chat-heading-actions { display: flex; align-items: center; gap: 15px; }
+		.chat-history { position: relative; }
+		.history-toggle { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #dfe7df; border-radius: 7px; background: white; color: #526158; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+		.history-toggle:hover, .history-toggle[aria-expanded="true"] { border-color: #a9c3ad; background: #f6faf5; color: var(--green-dark); }
+		.history-toggle svg { width: 14px; height: 14px; }
+		.chat-history-list { position: absolute; z-index: 3; top: calc(100% + 8px); right: 0; display: none; width: min(310px, calc(100vw - 36px)); padding: 8px; border: 1px solid #e3e9e3; border-radius: 10px; background: white; box-shadow: 0 12px 32px rgba(30,52,42,.14); }
+		.chat-history-list.open { display: grid; gap: 3px; }
+		.chat-history-list .section-label { padding: 5px 8px; color: #7d8981; }
+		.chat-history-list button { overflow: hidden; padding: 9px 8px; border: 0; border-radius: 6px; background: transparent; color: #526158; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+		.chat-history-list button:hover, .chat-history-list button.selected { background: var(--green-pale); color: var(--green-dark); }
+		.chat-history-list .history-date { padding: 9px 8px 4px; color: #9aa49d; font-size: 10px; }
+		.eyebrow { color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+		h1 { margin: 5px 0 0; font-size: 21px; font-weight: 600; letter-spacing: 0; }
+		.chat-date { padding-top: 5px; color: #919b94; font-size: 11px; }
+		.messages { width: 100%; min-height: 0; flex: 1; overflow: auto; padding: 13px 3px 20px; scrollbar-color: #d5ded6 transparent; scrollbar-width: thin; }
+		.day-divider { display: flex; align-items: center; gap: 12px; margin: 3px 0 22px; color: #89958d; font-size: 10px; }
+		.day-divider::before, .day-divider::after { height: 1px; flex: 1; background: #e7ebe6; content: ""; }
+		.message { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; animation: arrive .25s ease both; }
+		@keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+		.assistant-avatar { display: grid; width: 31px; height: 31px; flex: none; place-items: center; border: 2px solid #fff; border-radius: 10px; background: var(--green-dark); color: var(--lime); box-shadow: 0 2px 7px rgba(24,76,56,.15); }
+		.assistant-avatar svg { width: 16px; height: 16px; }
+		.message-body { min-width: 0; max-width: 100%; }
+		.message-meta { display: flex; align-items: center; gap: 8px; margin: 2px 0 7px; color: #8b968f; font-size: 10px; }
+		.message-meta strong { color: #34463d; font-size: 11px; font-weight: 600; }
+		.bubble { padding: 13px 15px; border: 1px solid #e7ebe6; border-radius: 3px 11px 11px 11px; background: white; color: #34443b; font-size: 12px; line-height: 1.85; box-shadow: 0 4px 12px rgba(30,52,42,.045); }
+		.message:not(.user-message) .bubble { border-left: 3px solid #a7c49e; }
+		.bubble p { margin: 0; }
+		.bubble p + p { margin-top: 8px; }
+		.bubble strong { color: #24382e; font-weight: 700; }
+		.bubble .green { color: var(--green); }
+		.assistant-intro { max-width: 100%; }
+		.user-message { justify-content: flex-end; margin: 0 0 18px; }
+		.user-message .message-body { display: flex; max-width: 75%; flex-direction: column; align-items: flex-end; }
+		.user-message .message-meta { justify-content: flex-end; }
+		.user-message .bubble { border-color: var(--green-dark); border-radius: 12px 3px 12px 12px; background: linear-gradient(135deg, #245a42, #184c38); color: #f3f7f3; box-shadow: 0 4px 12px rgba(24,76,56,.13); }
+		.user-message .bubble strong { color: white; }
+		.insight-card { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; align-items: center; margin-top: 12px; padding: 13px 14px; border: 1px solid #e2ebe1; border-radius: 9px; background: linear-gradient(120deg, #f8faf7, #f0f6ef); }
+		.insight-label { color: #8a968d; font-size: 9px; }
+		.insight-title { margin-top: 3px; color: #294236; font-size: 12px; font-weight: 600; }
+		.insight-desc { margin-top: 3px; color: #7b887f; font-size: 10px; }
+		.mini-chart { width: 90px; height: 42px; }
+		.mini-chart polyline { fill: none; stroke: #4f9b6d; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.5; }
+		.message-tools { display: flex; gap: 5px; margin: 7px 0 0 2px; }
+		.message-tools button { display: grid; width: 27px; height: 25px; place-items: center; border: 0; border-radius: 5px; background: transparent; color: #9aa49d; cursor: pointer; }
+		.message-tools button:hover { background: #edf2ed; color: var(--green); }
+		.message-tools svg { width: 14px; height: 14px; }
+		.composer-wrap { width: 100%; flex: none; margin-top: 9px; padding: 9px 2px 0; }
+		.suggestion-heading { margin: 0 0 8px 1px; color: #7b8980; font-size: 10px; font-weight: 600; }
+		.suggestions { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 10px 1px; }
+		.suggestions button { padding: 7px 10px; border: 1px solid #e0e7e0; border-radius: 20px; background: #f8faf7; color: #526158; font-size: 10px; cursor: pointer; transition: border .15s, background .15s, transform .15s; }
+		.suggestions button:hover { transform: translateY(-1px); border-color: #9bbb9f; background: white; }
+		.composer { display: flex; align-items: flex-end; gap: 10px; padding: 9px 10px 9px 14px; border: 1px solid #dce4dd; border-radius: 10px; background: white; box-shadow: 0 3px 10px rgba(30,52,42,.035); transition: border .2s, box-shadow .2s; }
+		.composer:focus-within { border-color: #8db09a; box-shadow: 0 0 0 3px rgba(35,107,77,.08); }
+		.composer textarea { width: 100%; min-height: 24px; max-height: 94px; resize: none; padding: 3px 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 12px; line-height: 1.6; }
+		.composer textarea::placeholder { color: #a2aaa4; }
+		.send-button { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border: 0; border-radius: 7px; background: var(--green-dark); color: white; cursor: pointer; transition: background .15s, transform .15s; }
+		.send-button:hover { transform: translateY(-1px); background: #246446; }
+		.send-button:disabled { background: #b9c7bd; cursor: default; transform: none; }
+		.send-button svg { width: 16px; height: 16px; }
+		.composer-note { display: flex; justify-content: space-between; padding: 8px 2px 0; color: #a0a8a2; font-size: 9px; }
+		.composer-note span:last-child { color: #87928a; }
+		.market-panel { min-width: 0; margin-top: 25px; padding: 17px 0 0; border-top: 1px solid var(--line); }
+		.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin: 0 0 10px; }
+		.panel-heading h2 { margin: 0; font-size: 13px; font-weight: 600; }
+		.panel-heading button { padding: 4px 0 4px 4px; border: 0; background: transparent; color: var(--green); font-size: 9px; white-space: nowrap; cursor: pointer; }
+		.market-card { padding: 10px 11px 8px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+		.market-card + .market-card { margin-top: 7px; }
+		.market-card-head { display: flex; align-items: center; justify-content: space-between; }
+		.market-name { color: #536158; font-size: 10px; }
+		.market-symbol { margin-top: 3px; color: #99a29c; font-size: 9px; }
+		.market-value { margin-top: 6px; font-size: 17px; font-weight: 600; letter-spacing: 0; }
+		.market-change { margin-top: 3px; color: var(--green); font-size: 10px; font-weight: 600; }
+		.market-change.down { color: var(--red); }
+		.market-chart { display: block; width: 100%; height: 30px; margin-top: 5px; }
+		.market-chart .fill { opacity: .11; }
+		.market-chart polyline { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+		.market-chart.green polyline { stroke: #4f9b6d; }
+		.market-chart.green .fill { fill: #4f9b6d; }
+		.market-chart.red polyline { stroke: #c85d52; }
+		.market-chart.red .fill { fill: #c85d52; }
+		.market-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 10px; border-left: 2px solid #a7c477; background: #f0f5e9; }
+		.note-spark { color: #678d3d; font-size: 15px; line-height: 1; }
+		.market-note p { margin: 0; color: #58644e; font-size: 10px; line-height: 1.65; }
+		.market-note strong { color: #334c32; }
+		.news-block { margin-top: 14px; }
+		.news-image { display: block; width: 100%; height: 76px; object-fit: cover; border-radius: 7px; background: #dce6dc; }
+		.news-kicker { margin-top: 7px; color: var(--green); font-size: 9px; font-weight: 700; letter-spacing: .7px; }
+		.news-title { margin-top: 4px; font-size: 11px; font-weight: 600; line-height: 1.55; }
+		.news-meta { margin-top: 5px; color: #9aa39c; font-size: 9px; }
+		.toast { position: fixed; z-index: 20; right: 22px; bottom: 20px; padding: 10px 14px; border-radius: 7px; background: #213b2e; color: white; font-size: 11px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transform: translateY(7px); transition: .2s; }
+		.toast.show { opacity: 1; transform: translateY(0); }
+		.backdrop { position: fixed; z-index: 4; inset: 0; background: rgba(15,31,23,.35); opacity: 0; pointer-events: none; transition: opacity .2s; }
+		.backdrop.open { opacity: 1; pointer-events: auto; }
+		/* OWASP security center */
+		#securityApp { --sec-ink: #17251f; --sec-muted: #68766e; --sec-line: #dce3dc; --sec-lime: #d9f36a; min-height: 100vh; overflow: auto; background: #f4f6f1; color: var(--sec-ink); font-family: "DM Sans", "Noto Sans TC", sans-serif; }
+		#securityApp[hidden] { display: none; }
+		#securityApp button, #securityApp input { font: inherit; }
+		#securityApp .security-topbar { position: sticky; z-index: 3; top: 0; display: flex; min-height: 68px; align-items: center; justify-content: space-between; padding: 0 clamp(18px, 5vw, 72px); border-bottom: 1px solid var(--sec-line); background: rgba(250,251,248,.94); backdrop-filter: blur(12px); }
+		#securityApp .security-top-left { display: flex; align-items: center; gap: 12px; }
+		#securityApp .menu-toggle { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--sec-line); background: white; cursor: pointer; }
+		#securityApp .menu-toggle:hover { background: #edf2ec; }
+		#securityApp .menu-toggle svg { width: 18px; height: 18px; }
+		#securityApp .menu-backdrop { position: fixed; z-index: 5; inset: 0; background: rgba(15,31,23,.35); opacity: 0; pointer-events: none; transition: opacity .2s; }
+		#securityApp .menu-backdrop.open { opacity: 1; pointer-events: auto; }
+		#securityApp .section-drawer { position: fixed; z-index: 6; inset: 0 auto 0 0; display: flex; width: min(300px, 86vw); flex-direction: column; padding: 23px 17px; border-right: 1px solid var(--sec-line); background: #fbfcf9; box-shadow: 12px 0 32px rgba(18,39,27,.12); transform: translateX(-105%); transition: transform .22s ease; }
+		#securityApp .section-drawer.open { transform: translateX(0); }
+		#securityApp .drawer-heading { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 23px; font-size: 13px; font-weight: 700; }
+		#securityApp .drawer-close { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--sec-line); background: white; cursor: pointer; }
+		#securityApp .drawer-label { margin: 0 8px 8px; color: #89958c; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+		#securityApp .drawer-links { display: grid; gap: 4px; }
+		#securityApp .drawer-links button { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border: 0; background: transparent; color: #435248; text-align: left; font-size: 11px; cursor: pointer; }
+		#securityApp .drawer-links button:hover, #securityApp .drawer-links button.active { background: #eaf1e9; color: #244536; }
+		#securityApp .drawer-links span { width: 29px; color: #8a9a8d; font-size: 9px; font-weight: 700; }
+		#securityApp .drawer-rule { height: 1px; margin: 17px 5px; background: var(--sec-line); }
+		#securityApp .drawer-note { margin: auto 8px 0; color: #839087; font-size: 10px; line-height: 1.6; }
+		#securityApp .security-brand { display: flex; align-items: center; gap: 11px; font-size: 13px; font-weight: 700; }
+		#securityApp .security-mark { display: grid; width: 32px; height: 32px; place-items: center; background: #193d30; color: var(--sec-lime); font-size: 12px; }
+		#securityApp .security-nav { display: flex; align-items: center; gap: 18px; color: var(--sec-muted); font-size: 11px; }
+		#securityApp .security-content { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 38px 0 56px; }
+		#securityApp .security-hero { position: relative; display: grid; min-height: 255px; grid-template-columns: minmax(0, 1fr) 240px; align-items: center; gap: 30px; overflow: hidden; padding: 36px 42px; background: #193d30; color: white; }
+		#securityApp .security-hero::after { position: absolute; right: 205px; bottom: -95px; width: 240px; height: 240px; border: 1px solid rgba(217,243,106,.3); border-radius: 50%; box-shadow: 0 0 0 28px rgba(217,243,106,.035), 0 0 0 58px rgba(217,243,106,.035); content: ""; }
+		#securityApp .security-kicker { color: var(--sec-lime); font-size: 10px; font-weight: 700; letter-spacing: 1.3px; }
+		#securityApp .security-hero h1 { max-width: 680px; margin: 12px 0 10px; font-size: clamp(26px, 4vw, 42px); line-height: 1.18; }
+		#securityApp .security-hero p { max-width: 620px; margin: 0; color: #ccdbd1; font-size: 13px; line-height: 1.8; }
+		#securityApp .hero-index { position: relative; z-index: 1; justify-self: end; color: var(--sec-lime); font-size: 74px; font-weight: 600; line-height: 1; }
+		#securityApp .hero-index span { display: block; margin-top: 9px; color: #c3d2c8; font-size: 10px; font-weight: 500; letter-spacing: 1px; text-align: right; }
+		#securityApp .section-bar { display: flex; align-items: end; justify-content: space-between; gap: 15px; margin: 32px 0 15px; }
+		#securityApp .section-bar h2 { margin: 0; font-size: 19px; }
+		#securityApp .section-bar p { margin: 0; color: var(--sec-muted); font-size: 11px; }
+		#securityApp .risk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+		#securityApp .risk-card { display: flex; min-height: 156px; flex-direction: column; padding: 14px; border: 1px solid var(--sec-line); background: #fff; transition: transform .18s, border-color .18s; }
+		#securityApp .risk-card:hover { transform: translateY(-3px); border-color: #88a392; }
+		#securityApp .risk-number { color: #64816e; font-size: 10px; font-weight: 700; }
+		#securityApp .risk-card h3 { margin: 13px 0 7px; font-size: 13px; line-height: 1.45; }
+		#securityApp .risk-card p { margin: 0; color: var(--sec-muted); font-size: 10px; line-height: 1.65; }
+		#securityApp .security-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 19px; color: #829087; font-size: 10px; line-height: 1.6; }
+		#securityApp .security-footer a { color: #315c45; }
+		@media (max-width: 900px) { #securityApp .risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+		@media (max-width: 560px) { #securityApp .security-topbar { min-height: 58px; padding: 0 14px; } #securityApp .security-content { width: calc(100% - 28px); padding-top: 18px; } #securityApp .security-hero { min-height: 240px; grid-template-columns: 1fr 70px; gap: 10px; padding: 24px 19px; } #securityApp .security-hero h1 { font-size: 27px; } #securityApp .security-hero p { font-size: 11px; } #securityApp .hero-index { font-size: 43px; } #securityApp .hero-index span { font-size: 8px; } #securityApp .risk-grid { gap: 7px; } #securityApp .risk-card { min-height: 160px; padding: 11px; } #securityApp .risk-card h3 { font-size: 12px; } #securityApp .security-footer { flex-direction: column; } }
+		@media (max-width: 1080px) {
+			.main-grid { padding-right: 23px; padding-left: 23px; }
+			.topbar { padding-right: 23px; padding-left: 23px; }
+			.market-card { padding: 12px; }
+		}
+		@media (max-width: 860px) {
+			.app { grid-template-columns: 218px minmax(0,1fr); }
+			.main-grid { grid-template-columns: minmax(0,1fr); padding: 23px 25px 20px; }
+		}
+		@media (max-width: 620px) {
+			body { overflow: hidden; }
+			.app { display: block; }
+			.workspace { height: 100dvh; }
+			.topbar { height: 58px; padding: 0 15px; }
+			.mobile-menu { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: white; cursor: pointer; }
+			.mobile-menu svg { width: 19px; height: 19px; }
+			.breadcrumb { font-size: 11px; }
+			.market-status { padding: 6px 8px; font-size: 10px; }
+			.top-actions { gap: 6px; }
+			.top-actions .icon-button { width: 31px; height: 31px; }
+			.main-grid { padding: 15px 14px 12px; }
+			.chat-heading { gap: 8px; padding: 5px 1px 11px; }
+			.chat-heading-actions { align-items: flex-end; flex-direction: column; gap: 7px; }
+			h1 { font-size: 18px; }
+			.chat-date { font-size: 9px; }
+			.messages { padding: 10px 1px 16px; }
+			.message { gap: 8px; margin-bottom: 15px; }
+			.bubble { padding: 10px 11px; font-size: 11px; }
+			.user-message .message-body { max-width: 86%; }
+			.suggestions { gap: 6px; }
+			.suggestions button { padding: 7px 9px; font-size: 9px; }
+			.composer-wrap { padding: 9px 1px 0; }
+			.composer { padding: 8px 8px 8px 11px; }
+			.composer-note { font-size: 8px; }
+			.insight-card { gap: 5px; padding: 10px; }
+		}
+	</style>
+</head>
+<body>
+	<div id="securityApp">
+		<div class="menu-backdrop" id="menuBackdrop"></div>
+		<aside class="section-drawer" id="sectionDrawer" aria-label="工作區分類選單" aria-hidden="true">
+			<div class="drawer-heading"><span>工作區分類</span><button class="drawer-close" type="button" id="closeSectionMenu" aria-label="關閉選單">×</button></div>
+			<div class="drawer-label">安全與治理</div>
+			<nav class="drawer-links" aria-label="安全工具"><button type="button" data-route="overview" class="active"><span>01</span>OWASP LLM 十大風險</button></nav>
+			<div class="drawer-rule"></div>
+			<div class="drawer-label">金融工作區</div>
+			<nav class="drawer-links" aria-label="金融工具"><button type="button" data-route="finance"><span>02</span>金融聊天助理</button></nav>
+			<div class="drawer-note">集中瀏覽模型安全風險與金融對話。</div>
+		</aside>
+		<header class="security-topbar">
+			<div class="security-top-left"><button class="menu-toggle" type="button" id="openSectionMenu" aria-label="開啟工作區分類選單" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button><div class="security-brand"><span class="security-mark">AI</span><span>模型安全中心</span></div></div>
+			<nav class="security-nav" aria-label="安全中心導覽"><span>OWASP FOUNDATION · 2025</span></nav>
+		</header>
+		<main class="security-content">
+			<section class="overview-view" id="overviewView">
+				<div class="security-hero"><div><div class="security-kicker">LLM APPLICATION SECURITY</div><h1>理解風險，<br>讓生成式 AI 更安全。</h1><p>OWASP Top 10 for LLM Applications 彙整大型語言模型應用常見的安全風險，協助開發與治理團隊建立防護優先順序。</p></div><div class="hero-index">10<span>KEY RISKS · 2025</span></div></div>
+				<div class="section-bar"><div><h2>LLM 十大安全風險</h2><p style="margin-top:5px">由提示、資料到代理權限，快速掌握主要攻擊面。</p></div><p>OWASP Top 10 for LLM Applications · 2025</p></div>
+				<div class="risk-grid" id="riskGrid" aria-label="OWASP LLM 十大風險"></div>
+				<footer class="security-footer"><span>此頁為安全教育與管理介面示範，不構成完整安全稽核。</span><a href="https://genai.owasp.org/llm-top-10/" target="_blank" rel="noreferrer">查看 OWASP 官方資料 ↗</a></footer>
+			</section>
+		</main>
+	</div>
+	<div class="app" hidden aria-hidden="true">
+		<aside class="sidebar" id="sidebar">
+			<div class="brand">
+				<div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 17.5 9 12l3.5 3.5L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7H20v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+				<div><div class="brand-name">日常理財</div><div class="brand-caption">YOUR FINANCE COMPANION</div></div>
+			</div>
+			<button class="new-chat" id="newChat"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>開啟新對話</button>
+			<div class="side-section">
+				<div class="section-label">工作空間</div>
+				<nav class="side-nav" aria-label="主選單">
+					<button class="side-link active" data-view="對話助理"><svg viewBox="0 0 24 24" fill="none"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.8-3A7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 11h6M9 14h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>對話助理</button>
+					<button class="side-link" data-view="投資組合"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19V5m0 14h16M7 15l4-4 3 2 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>投資組合</button>
+					<button class="side-link" data-view="市場觀察"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19h16M6 16V9m4 7V5m4 11v-5m4 5V7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>市場觀察</button>
+					<button class="side-link" id="openSecurityFromChat"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 5 6v5c0 4.5 2.9 8.4 7 10 4.1-1.6 7-5.5 7-10V6l-7-3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>OWASP LLM 風險中心</button>
+				</nav>
+			</div>
+			<aside class="market-panel" aria-label="市場資訊">
+				<div class="panel-heading"><h2>市場一覽</h2><button id="refreshMarket">更新時間 10:42 ↻</button></div>
+				<article class="market-card"><div class="market-card-head"><div><div class="market-name">加權指數</div><div class="market-symbol">TAIEX・台灣</div></div><div class="market-change">＋0.68%</div></div><div class="market-value">22,148.72</div><svg class="market-chart green" viewBox="0 0 240 44" preserveAspectRatio="none" aria-label="加權指數走勢圖"><path class="fill" d="M0 35 18 31 34 34 51 24 69 28 86 18 102 21 120 11 137 16 154 10 173 16 190 8 208 13 225 4 240 6v38H0z"/><polyline points="0,35 18,31 34,34 51,24 69,28 86,18 102,21 120,11 137,16 154,10 173,16 190,8 208,13 225,4 240,6"/></svg></article>
+				<article class="market-card"><div class="market-card-head"><div><div class="market-name">台積電</div><div class="market-symbol">2330・TW</div></div><div class="market-change">＋1.24%</div></div><div class="market-value">1,095.00</div><svg class="market-chart green" viewBox="0 0 240 44" preserveAspectRatio="none" aria-label="台積電股價走勢圖"><path class="fill" d="M0 37 17 34 35 36 53 25 70 29 87 19 104 23 121 17 139 21 156 10 173 15 190 8 208 11 225 3 240 5v39H0z"/><polyline points="0,37 17,34 35,36 53,25 70,29 87,19 104,23 121,17 139,21 156,10 173,15 190,8 208,11 225,3 240,5"/></svg></article>
+				<article class="market-card"><div class="market-card-head"><div><div class="market-name">美元 / 新台幣</div><div class="market-symbol">USD / TWD</div></div><div class="market-change down">－0.12%</div></div><div class="market-value">32.78</div><svg class="market-chart red" viewBox="0 0 240 44" preserveAspectRatio="none" aria-label="美元匯率走勢圖"><path class="fill" d="M0 8 18 12 35 9 52 19 70 15 87 24 104 20 121 29 138 23 155 33 174 29 190 38 208 33 225 41 240 36v8H0z"/><polyline points="0,8 18,12 35,9 52,19 70,15 87,24 104,20 121,29 138,23 155,33 174,29 190,38 208,33 225,41 240,36"/></svg></article>
+				<div class="market-note"><span class="note-spark">✳</span><p><strong>今日小提醒</strong><br>市場短期波動難以預測，分散配置與長期紀律通常比追逐熱門標的更重要。</p></div>
+				<article class="news-block"><img class="news-image" src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=720&q=80" alt="金融市場數據與交易圖表" loading="lazy"><div class="news-kicker">市場焦點・5 分鐘閱讀</div><div class="news-title">利率走向牽動市場，投資人可以觀察哪些指標？</div><div class="news-meta">研究觀察 ・ 上午 9:15</div></article>
+			</aside>
+			<div class="sidebar-spacer"></div>
+		</aside>
+		<div class="backdrop" id="backdrop"></div>
+		<section class="workspace">
+			<header class="topbar">
+				<div class="top-left">
+					<button class="mobile-menu" id="menuButton" type="button" aria-label="開啟選單" aria-expanded="false" title="開啟選單"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+					<div class="breadcrumb">工作空間 / <strong id="viewName">對話助理</strong></div>
+				</div>
+				<div class="top-actions"><div class="market-status"><span class="status-dot"></span>台股交易中</div><button class="icon-button" id="shareButton" aria-label="分享對話" title="分享對話"><svg viewBox="0 0 24 24" fill="none"><circle cx="18" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="12" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="19" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="m8.2 10.8 7.5-4.5m-7.5 7 7.5 4.5" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+			</header>
+			<main class="main-grid">
+				<section class="chat-column" aria-label="金融聊天對話">
+					<div class="chat-heading">
+						<div><div class="eyebrow">YOUR FINANCE DESK</div><h1>今天想聊些什麼？</h1></div>
+						<div class="chat-heading-actions">
+							<div class="chat-history">
+								<button class="history-toggle" id="historyToggle" type="button" aria-expanded="false" aria-controls="chatHistoryList">
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m17 16 2 2 3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+									最近對話
+								</button>
+								<div class="chat-history-list" id="chatHistoryList" aria-label="最近對話紀錄">
+									<div class="section-label">今天</div>
+									<button type="button" data-conversation="taiwan-semi">台積電近期值得留意嗎？</button>
+									<button type="button" data-conversation="monthly-saving">每月存款怎麼分配？</button>
+									<button type="button" data-conversation="etf-cost">ETF 費用怎麼看？</button>
+									<div class="history-date">昨天</div>
+									<button type="button" data-conversation="rates-bonds">升息與債券的關係</button>
+								</div>
+							</div>
+							<time class="chat-date" id="chatDate"></time>
+						</div>
+					</div>
+					<div class="messages" id="messages" aria-live="polite">
+						<div class="day-divider"><span>今天</span></div>
+						<article class="message">
+							<div class="assistant-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 17.5 9 12l3.5 3.5L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7H20v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+							<div class="message-body assistant-intro">
+								<div class="message-meta"><strong>金融小幫手</strong><span>上午 10:32</span></div>
+								<div class="bubble"><p>早安。今天台股開盤後走勢偏穩，加權指數目前來到 <strong>22,148 點</strong>。你想先看看市場概況，還是聊聊自己的投資規劃？</p></div>
+								<div class="insight-card"><div><div class="insight-label">盤中觀察・加權指數</div><div class="insight-title">買盤回溫，電子股領漲</div><div class="insight-desc">成交量較昨日同期增加 8.4%</div></div><svg class="mini-chart" viewBox="0 0 90 42" aria-label="指數走勢向上"><polyline points="2,33 12,29 21,31 31,20 40,24 51,14 60,17 69,9 78,13 88,4"/></svg></div>
+								<div class="message-tools"><button aria-label="複製回覆" title="複製回覆" class="copy-button"><svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.6"/></svg></button></div>
+							</div>
+						</article>
+						<article class="message user-message">
+							<div class="message-body"><div class="message-meta"><span>上午 10:34</span><strong>你</strong></div><div class="bubble"><p>我有一筆 20 萬的閒置資金，想開始投資但不太確定怎麼分配。</p></div></div>
+						</article>
+						<article class="message">
+							<div class="assistant-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 17.5 9 12l3.5 3.5L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7H20v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+							<div class="message-body"><div class="message-meta"><strong>金融小幫手</strong><span>上午 10:34</span></div><div class="bubble"><p>開始投資前，先確認這筆錢<strong>至少 3 年內不需要動用</strong>，也預留 3–6 個月生活費作為緊急預備金。若條件符合，可以考慮分批投入，降低一次進場的時點風險。</p><p>想先了解你的<strong>投資年期、風險承受度</strong>，或目前是否有緊急預備金？我可以再陪你細看適合的方向。</p></div><div class="message-tools"><button aria-label="複製回覆" title="複製回覆" class="copy-button"><svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.6"/></svg></button></div></div>
+						</article>
+					</div>
+					<div class="composer-wrap">
+						<div class="suggestion-heading">接著可以聊聊</div>
+						<div class="suggestions"><button>幫我看懂 ETF</button><button>怎麼建立緊急預備金？</button><button>比較定期定額和單筆投入</button></div>
+						<form class="composer" id="chatForm"><textarea id="chatInput" rows="1" placeholder="輸入你的理財問題…" aria-label="輸入訊息"></textarea><button class="send-button" id="sendButton" type="submit" aria-label="送出訊息" disabled><svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>
+						<div class="composer-note"><span>金融小幫手提供一般資訊，不構成個人化投資建議。</span><span>Enter 送出・Shift + Enter 換行</span></div>
+					</div>
+				</section>
+			</main>
+		</section>
+	</div>
+	<div class="toast" id="toast" role="status"></div>
+	<script>
+		const form = document.querySelector('#chatForm');
+		const input = document.querySelector('#chatInput');
+		const sendButton = document.querySelector('#sendButton');
+		const messages = document.querySelector('#messages');
+		const toast = document.querySelector('#toast');
+		const chatDate = document.querySelector('#chatDate');
+		let toastTimer;
+		let isReplying = false;
+
+		function updateChatDate() {
+			const now = new Date();
+			const time = [now.getHours(), now.getMinutes(), now.getSeconds()].map(value => String(value).padStart(2, '0')).join(':');
+			chatDate.textContent = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日 ${time}`;
+		}
+		updateChatDate();
+		window.setInterval(updateChatDate, 1000);
+
+		function showToast(text) {
+			toast.textContent = text;
+			toast.classList.add('show');
+			clearTimeout(toastTimer);
+			toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+		}
+
+		function escapeHtml(value) {
+			return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+		}
+
+		function addMessage(text, role, content, time = '剛剛') {
+			const article = document.createElement('article');
+			article.className = `message ${role === 'user' ? 'user-message' : ''}`;
+			if (role === 'user') {
+				article.innerHTML = `<div class="message-body"><div class="message-meta"><span>${escapeHtml(time)}</span><strong>你</strong></div><div class="bubble"><p>${escapeHtml(text).replace(/\n/g, '<br>')}</p></div></div>`;
+			} else {
+				article.innerHTML = `<div class="assistant-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 17.5 9 12l3.5 3.5L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7H20v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="message-body"><div class="message-meta"><strong>金融小幫手</strong><span>${escapeHtml(time)}</span></div><div class="bubble"><p>${content}</p></div><div class="message-tools"><button aria-label="複製回覆" title="複製回覆" class="copy-button"><svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.6"/></svg></button></div></div>`;
+			}
+			messages.append(article);
+			messages.scrollTop = messages.scrollHeight;
+		}
+
+		const conversationRecords = {
+			'taiwan-semi': {
+				day: '今天',
+				messages: [
+					{ role: 'user', text: '我想了解台積電近期的表現與風險。', time: '上午 10:32' },
+					{ role: 'assistant', text: '評估台積電時，可以一起觀察近期營收與獲利、先進製程需求、資本支出，以及市場對未來成長的預期。可能的風險包括景氣循環、地緣政治與供應鏈變化，以及股價估值波動。建議搭配自己的投資期限與風險承受度評估，避免只依單一消息做決定。', time: '上午 10:33' }
+				]
+			},
+			'monthly-saving': {
+				day: '今天',
+				messages: [
+					{ role: 'user', text: '我每月可以存 15,000 元，該怎麼開始投資？', time: '上午 9:48' },
+					{ role: 'assistant', text: '可以先確認高利率負債已安排處理，並準備約 3–6 個月必要支出的緊急預備金。接著依目標與用錢時間分配每月存款；若是長期資金，可先研究分散度、費用與風險符合自己的投資工具，再考慮固定頻率投入。比例仍要依你的支出、年期和承受波動能力調整。', time: '上午 9:49' }
+				]
+			},
+			'etf-cost': {
+				day: '今天',
+				messages: [
+					{ role: 'user', text: '可以用簡單的方式解釋 ETF 的費用嗎？', time: '上午 9:15' },
+					{ role: 'assistant', text: 'ETF 費用可以先分成兩類：交易時可能支付的手續費與交易稅，以及持有期間由基金資產扣除的經理費、保管費等內扣費用。比較時可查看基金公開說明書與總費用率，也要留意追蹤指數、折溢價和流動性；費用較低不代表一定適合，仍需看投資目標與風險。', time: '上午 9:16' }
+				]
+			},
+			'rates-bonds': {
+				day: '昨天',
+				messages: [
+					{ role: 'user', text: '升息對債券價格有什麼影響？', time: '下午 3:21' },
+					{ role: 'assistant', text: '一般而言，市場利率上升時，既有固定票息債券的價格容易下跌，因為新發行債券可能提供較高收益。債券價格對利率變化的敏感度常以存續期間觀察；存續期間越長，價格通常越敏感。不過實際報酬也受信用風險、到期時間與市場預期影響。', time: '下午 3:22' }
+				]
+			}
+		};
+		const historyToggle = document.querySelector('#historyToggle');
+		const chatHistoryList = document.querySelector('#chatHistoryList');
+		const chatHeading = document.querySelector('.chat-heading h1');
+		function setHistoryListOpen(open) {
+			chatHistoryList.classList.toggle('open', open);
+			historyToggle.setAttribute('aria-expanded', String(open));
+		}
+		historyToggle.addEventListener('click', () => setHistoryListOpen(!chatHistoryList.classList.contains('open')));
+		chatHistoryList.querySelectorAll('[data-conversation]').forEach(button => button.addEventListener('click', () => {
+			if (isReplying) return;
+			const record = conversationRecords[button.dataset.conversation];
+			if (!record) return;
+			messages.replaceChildren();
+			const divider = document.createElement('div');
+			divider.className = 'day-divider';
+			divider.innerHTML = `<span>${escapeHtml(record.day)}</span>`;
+			messages.append(divider);
+			record.messages.forEach(message => {
+				const content = message.role === 'assistant' ? escapeHtml(message.text).replace(/\n/g, '<br>') : '';
+				addMessage(message.role === 'user' ? message.text : '', message.role, content, message.time);
+			});
+			chatHistoryList.querySelectorAll('[data-conversation]').forEach(item => item.classList.toggle('selected', item === button));
+			chatHeading.textContent = button.textContent;
+			setHistoryListOpen(false);
+		}));
+		document.addEventListener('click', event => {
+			if (!event.target.closest('.chat-history')) setHistoryListOpen(false);
+		});
+
+		// 改為串接 FastAPI 後端（http://127.0.0.1:8000/chat）與本地 TAIDE 模型
+		form.addEventListener('submit', async event => {
+			event.preventDefault();
+			const text = input.value.trim();
+			if (!text || isReplying) return;
+			isReplying = true;
+			addMessage(text, 'user');
+			input.value = '';
+			input.style.height = '24px';
+			sendButton.disabled = true;
+
+			// 顯示 AI 正在思考中
+			const loadingId = 'loading-' + Date.now();
+			const loadingArticle = document.createElement('article');
+			loadingArticle.className = 'message';
+			loadingArticle.id = loadingId;
+			loadingArticle.innerHTML = `<div class="assistant-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 17.5 9 12l3.5 3.5L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7H20v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="message-body"><div class="message-meta"><strong>金融小幫手</strong><span>剛剛</span></div><div class="bubble"><p>正在思考中...</p></div></div>`;
+			messages.append(loadingArticle);
+			messages.scrollTop = messages.scrollHeight;
+
+			try {
+				const response = await fetch('http://127.0.0.1:8000/chat', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ message: text })
+				});
+
+				if (!response.ok) {
+					throw new Error('伺服器回應發生錯誤');
+				}
+
+				const data = await response.json();
+				document.getElementById(loadingId)?.remove();
+
+				const formattedReply = escapeHtml(data.reply).replace(/\n/g, '<br>');
+				addMessage('', 'assistant', formattedReply);
+
+			} catch (error) {
+				document.getElementById(loadingId)?.remove();
+				addMessage('', 'assistant', '無法連線至本地伺服器，請確認 FastAPI 是否正在執行中（python -m uvicorn main:app --reload）。');
+			} finally {
+				isReplying = false;
+				sendButton.disabled = !input.value.trim();
+			}
+		});
+
+		input.addEventListener('input', () => {
+			sendButton.disabled = isReplying || !input.value.trim();
+			input.style.height = '24px';
+			input.style.height = `${Math.min(input.scrollHeight, 94)}px`;
+		});
+		input.addEventListener('keydown', event => {
+			if (event.key === 'Enter' && !event.shiftKey) {
+				event.preventDefault();
+				form.requestSubmit();
+			}
+		});
+		document.querySelectorAll('.suggestions button').forEach(button => button.addEventListener('click', () => {
+			if (isReplying) return;
+			input.value = button.textContent;
+			sendButton.disabled = false;
+			form.requestSubmit();
+		}));
+		document.querySelector('#newChat').addEventListener('click', () => {
+			messages.innerHTML = '<div class="day-divider"><span>新對話</span></div>';
+			chatHistoryList.querySelectorAll('[data-conversation]').forEach(button => button.classList.remove('selected'));
+			chatHeading.textContent = '今天想聊些什麼？';
+			setHistoryListOpen(false);
+			input.value = '';
+			sendButton.disabled = true;
+			closeSidebar();
+			showToast('已開啟新對話');
+			input.focus();
+		});
+		document.querySelectorAll('.side-link').forEach(button => button.addEventListener('click', () => {
+			document.querySelectorAll('.side-link').forEach(link => link.classList.remove('active'));
+			button.classList.add('active');
+			document.querySelector('#viewName').textContent = button.dataset.view;
+			if (button.dataset.view !== '對話助理') showToast(`${button.dataset.view}摘要已在右側市場資訊中提供`);
+			closeSidebar();
+		}));
+		document.addEventListener('click', async event => {
+			const button = event.target.closest('.copy-button');
+			if (!button) return;
+			const bubble = button.closest('.message-body').querySelector('.bubble');
+			try { await navigator.clipboard.writeText(bubble.innerText); showToast('已複製回覆'); }
+			catch { showToast('目前無法使用剪貼簿'); }
+		});
+		document.querySelector('#shareButton').addEventListener('click', async () => {
+			try { await navigator.clipboard.writeText(location.href); showToast('頁面連結已複製'); }
+			catch { showToast('可從瀏覽器網址列分享此頁'); }
+		});
+		document.querySelector('#refreshMarket').addEventListener('click', event => {
+			const now = new Date();
+			event.currentTarget.textContent = `更新時間 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ↻`;
+			showToast('行情摘要已更新');
+		});
+
+		const sidebar = document.querySelector('#sidebar');
+		const backdrop = document.querySelector('#backdrop');
+		const menuButton = document.querySelector('#menuButton');
+		function syncSidebarToggle() {
+			const isOpen = sidebar.classList.contains('open');
+			menuButton.setAttribute('aria-expanded', String(isOpen));
+			menuButton.setAttribute('aria-label', isOpen ? '關閉選單' : '開啟選單');
+			menuButton.title = isOpen ? '關閉選單' : '開啟選單';
+		}
+		function closeSidebar() {
+			sidebar.classList.remove('open');
+			backdrop.classList.remove('open');
+			syncSidebarToggle();
+		}
+		menuButton.addEventListener('click', () => {
+			const isOpen = sidebar.classList.toggle('open');
+			backdrop.classList.toggle('open', isOpen);
+			syncSidebarToggle();
+		});
+		syncSidebarToggle();
+		backdrop.addEventListener('click', closeSidebar);
+	</script>
+	<script>
+		const risks = [
+			['LLM01', '提示注入', '惡意指令可能覆蓋模型原有規則，或操控模型執行非預期任務。'],
+			['LLM02', '敏感資訊揭露', '模型可能在回應中暴露個資、機密資料、憑證或訓練資訊。'],
+			['LLM03', '供應鏈風險', '模型、資料集、外掛與第三方服務的弱點可能傳入應用程式。'],
+			['LLM04', '資料與模型投毒', '被竄改的訓練或檢索資料可能影響模型行為與輸出品質。'],
+			['LLM05', '不當輸出處理', '未驗證的模型輸出若直接交給下游系統，可能造成注入或執行風險。'],
+			['LLM06', '過度代理權限', '代理若取得過多工具或權限，錯誤指令可能擴大為高影響操作。'],
+			['LLM07', '系統提示詞洩漏', '提示詞中的內部指令、策略或機密可能被誘導透露。'],
+			['LLM08', '向量與嵌入弱點', '檢索資料污染、存取控制錯誤或向量庫隔離不足可能洩漏資訊。'],
+			['LLM09', '錯誤資訊', '模型可能產生看似可信但不正確的內容，進而誤導決策或流程。'],
+			['LLM10', '無限制消耗', '缺乏用量與成本限制可能導致資源耗盡、拒絕服務或預算超支。']
+		];
+		const riskGrid = document.querySelector('#riskGrid');
+		riskGrid.innerHTML = risks.map(([number, title, description]) => `<article class="risk-card"><span class="risk-number">${number}</span><h3>${title}</h3><p>${description}</p></article>`).join('');
+	</script>
+	<script>
+		const financeWorkspace = document.querySelector('.app');
+		const securityWorkspace = document.querySelector('#securityApp');
+		const sectionDrawer = document.querySelector('#sectionDrawer');
+		const menuBackdrop = document.querySelector('#menuBackdrop');
+		const menuToggle = document.querySelector('#openSectionMenu');
+		function setSectionMenu(open) {
+			sectionDrawer.classList.toggle('open', open);
+			menuBackdrop.classList.toggle('open', open);
+			sectionDrawer.setAttribute('aria-hidden', String(!open));
+			menuToggle.setAttribute('aria-expanded', String(open));
+		}
+		menuToggle.addEventListener('click', () => setSectionMenu(true));
+		document.querySelector('#closeSectionMenu').addEventListener('click', () => setSectionMenu(false));
+		menuBackdrop.addEventListener('click', () => setSectionMenu(false));
+		document.querySelectorAll('[data-route]').forEach(button => button.addEventListener('click', () => {
+			setSectionMenu(false);
+			const route = button.dataset.route;
+			if (route === 'finance') {
+				securityWorkspace.hidden = true;
+				financeWorkspace.hidden = false;
+				return;
+			}
+			financeWorkspace.hidden = true;
+			securityWorkspace.hidden = false;
+			document.querySelectorAll('[data-route]').forEach(link => link.classList.toggle('active', link.dataset.route === route));
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		}));
+		document.querySelector('#openSecurityFromChat').addEventListener('click', () => {
+			financeWorkspace.hidden = true;
+			securityWorkspace.hidden = false;
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		});
+		document.addEventListener('keydown', event => { if (event.key === 'Escape') setSectionMenu(false); });
+	</script>
+</body>
+</html>
