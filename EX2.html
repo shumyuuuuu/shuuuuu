@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="theme-color" content="#123c36">
+	<title>澄川銀行 | 智能客服中心與模型安全</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			color-scheme: light;
+			--ink: #172824;
+			--muted: #687570;
+			--line: #e2e8e4;
+			--paper: #ffffff;
+			--canvas: #f3f6f3;
+			--green: #176c56;
+			--green-deep: #123c36;
+			--green-soft: #e6f2eb;
+			--gold: #b98035;
+			--warning: #fff5e8;
+			--shadow: 0 16px 44px rgba(25, 51, 42, .08);
+		}
+
+		* { box-sizing: border-box; }
+		.app[hidden] { display: none !important; }
+		body {
+			margin: 0;
+			min-width: 320px;
+			min-height: 100vh;
+			background: var(--canvas);
+			color: var(--ink);
+			font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+		}
+		button, input, textarea { font: inherit; }
+		button { cursor: pointer; }
+		button:focus-visible, textarea:focus-visible {
+			outline: 3px solid rgba(23, 108, 86, .28);
+			outline-offset: 2px;
+		}
+
+		/* ===== 側邊抽屜選單 (供對話頁切回 OWASP 安全中心) ===== */
+		.sidebar {
+			position: fixed;
+			inset: 0 auto 0 0;
+			z-index: 10;
+			display: flex;
+			flex-direction: column;
+			width: min(300px, 86vw);
+			min-height: 0;
+			overflow-y: auto;
+			padding: 23px 17px;
+			border-right: 1px solid var(--line);
+			background: #fbfcf9;
+			box-shadow: 12px 0 32px rgba(18, 39, 27, .12);
+			transform: translateX(-105%);
+			transition: transform .22s ease;
+		}
+		.sidebar.open { transform: translateX(0); }
+		.sidebar .drawer-heading { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 23px; font-size: 13px; font-weight: 700; }
+		.sidebar .drawer-close { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--line); background: white; cursor: pointer; }
+		.sidebar .drawer-label { margin: 0 8px 8px; color: #89958c; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+		.sidebar .drawer-links { display: grid; gap: 4px; }
+		.sidebar .drawer-links button { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border: 0; background: transparent; color: #435248; text-align: left; font-size: 11px; cursor: pointer; }
+		.sidebar .drawer-links button:hover, .sidebar .drawer-links button.active { background: #eaf1e9; color: #244536; }
+		.sidebar .drawer-links span { width: 29px; color: #8a9a8d; font-size: 9px; font-weight: 700; }
+		.sidebar .drawer-rule { height: 1px; margin: 17px 5px; background: var(--line); }
+		.sidebar .drawer-note { margin: auto 8px 0; color: #839087; font-size: 10px; line-height: 1.6; }
+
+		.backdrop { position: fixed; z-index: 8; inset: 0; background: rgba(15, 31, 23, .35); opacity: 0; pointer-events: none; transition: opacity .2s; }
+		.backdrop.open { opacity: 1; pointer-events: auto; }
+
+		/* ===== 11.html 對話頁面樣式 ===== */
+		.topbar {
+			height: 72px;
+			padding: 0 max(28px, calc((100vw - 1380px) / 2));
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			background: var(--green-deep);
+			color: white;
+		}
+		.topbar-left { display: flex; align-items: center; gap: 14px; }
+		.mobile-menu {
+			width: 38px;
+			height: 38px;
+			display: grid;
+			place-items: center;
+			border: 1px solid rgba(255, 255, 255, .28);
+			border-radius: 8px;
+			background: rgba(255, 255, 255, .06);
+			color: white;
+			transition: background .15s;
+		}
+		.mobile-menu:hover { background: rgba(255, 255, 255, .15); }
+		.mobile-menu svg { width: 18px; height: 18px; }
+		.brand { display: flex; align-items: center; gap: 12px; }
+		.brand-mark {
+			width: 38px;
+			height: 38px;
+			display: grid;
+			place-items: center;
+			border: 1px solid rgba(255,255,255,.35);
+			border-radius: 10px;
+			color: #e6c88f;
+			font-family: Georgia, serif;
+			font-size: 22px;
+		}
+		.brand-name { font-family: Georgia, "Noto Serif TC", serif; font-size: 18px; letter-spacing: 1px; }
+		.brand-sub { margin-top: 2px; color: #c5d6ce; font-size: 11px; letter-spacing: 1.5px; }
+		.topbar-right { display: flex; align-items: center; gap: 22px; color: #d4e0da; font-size: 13px; }
+		.secure-label { display: flex; align-items: center; gap: 8px; }
+		.secure-dot, .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #83c998; }
+
+		.page { max-width: 1380px; margin: 0 auto; padding: 36px 28px 46px; }
+		.page-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 24px; }
+		.eyebrow { margin: 0 0 8px; color: var(--green); font-size: 12px; font-weight: 700; letter-spacing: 1.7px; }
+		.page-heading h1 { margin: 0; font-family: "Noto Serif TC", "Microsoft JhengHei", serif; font-size: 29px; font-weight: 600; }
+		.heading-note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+		.office-hours { padding: 9px 13px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: rgba(255,255,255,.65); font-size: 12px; }
+
+		.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; align-items: stretch; }
+		.chat-panel, .side-panel { border: 1px solid var(--line); border-radius: 8px; background: var(--paper); box-shadow: var(--shadow); }
+		.chat-panel { min-width: 0; display: grid; grid-template-rows: auto minmax(420px, 1fr) auto; overflow: hidden; }
+		.chat-header { min-height: 72px; padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+		.agent { display: flex; align-items: center; gap: 12px; }
+		.agent-avatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: var(--green-soft); font-size: 15px; font-weight: 700; }
+		.agent-name { font-size: 14px; font-weight: 700; }
+		.agent-status { margin-top: 4px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+		.status-dot { width: 7px; height: 7px; background: #a4aaa6; }
+		.status-dot.online { background: #48a36c; }
+		.header-actions { display: flex; gap: 8px; }
+		.quiet-button { min-height: 36px; padding: 0 11px; border: 1px solid var(--line); border-radius: 5px; color: #42504a; background: white; font-size: 12px; }
+		.quiet-button:hover { border-color: #a8beb3; background: #f8faf8; }
+
+		.messages { padding: 22px; max-height: 540px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
+		.date-divider { display: flex; align-items: center; gap: 12px; color: #8a9590; font-size: 11px; }
+		.date-divider::before, .date-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+		.message-row { display: flex; align-items: end; gap: 9px; animation: arrive .22s ease-out both; }
+		.message-row.user { justify-content: end; }
+		.message-avatar { width: 27px; height: 27px; flex: 0 0 27px; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: var(--green-soft); font-size: 10px; font-weight: 700; }
+		.message-body { max-width: min(76%, 620px); }
+		.message-label { margin: 0 0 6px 2px; color: var(--muted); font-size: 10px; }
+		.message-bubble { padding: 12px 15px; border: 1px solid var(--line); border-radius: 4px 13px 13px 13px; background: #f7f9f7; color: #283831; font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.user .message-bubble { border-color: var(--green); border-radius: 13px 4px 13px 13px; color: white; background: var(--green); }
+		.message-time { margin: 5px 2px 0; color: #929b96; font-size: 10px; }
+		.user .message-time { text-align: right; }
+		.typing { display: flex; align-items: center; gap: 5px; min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 4px 13px 13px 13px; background: #f7f9f7; }
+		.typing span { width: 6px; height: 6px; border-radius: 50%; background: #8a9c92; animation: pulse 1s infinite ease-in-out; }
+		.typing span:nth-child(2) { animation-delay: .15s; }
+		.typing span:nth-child(3) { animation-delay: .3s; }
+
+		.composer { padding: 15px 20px 12px; border-top: 1px solid var(--line); background: #fcfdfc; }
+		.composer-box { padding: 10px 11px 8px 14px; border: 1px solid #cbd7d0; border-radius: 6px; background: white; transition: border-color .15s, box-shadow .15s; }
+		.composer-box:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23,108,86,.08); }
+		textarea { width: 100%; min-height: 48px; max-height: 130px; resize: vertical; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 14px; line-height: 1.6; }
+		textarea::placeholder { color: #96a19b; }
+		.composer-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+		.input-hint, .char-count { color: #87928c; font-size: 10px; }
+		.send-button { min-width: 88px; height: 36px; padding: 0 15px; border: 0; border-radius: 4px; color: white; background: var(--green); font-size: 13px; font-weight: 700; transition: background .15s, opacity .15s; }
+		.send-button:hover:not(:disabled) { background: #105744; }
+		.send-button:disabled { cursor: not-allowed; opacity: .45; }
+		.disclaimer { padding-top: 10px; color: #89948e; font-size: 10px; line-height: 1.5; }
+
+		.side-panel { padding: 21px 18px; }
+		.side-title { margin: 0; font-size: 14px; font-weight: 700; }
+		.side-caption { margin: 7px 0 15px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+		.topic-list { display: grid; gap: 8px; }
+		.topic-button { min-height: 45px; padding: 9px 11px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 5px; color: #33443c; background: white; text-align: left; font-size: 12px; transition: border-color .15s, background .15s; }
+		.topic-button:hover { border-color: #99b9a7; background: #f4f9f5; }
+		.topic-arrow { color: var(--green); font-size: 15px; }
+		.side-rule { height: 1px; margin: 21px 0; background: var(--line); }
+		.service-list { display: grid; gap: 14px; }
+		.service-item { display: flex; align-items: start; gap: 10px; }
+		.service-mark { width: 27px; height: 27px; flex: 0 0 27px; display: grid; place-items: center; border-radius: 5px; color: var(--green); background: var(--green-soft); font-size: 11px; font-weight: 700; }
+		.service-name { font-size: 12px; font-weight: 700; }
+		.service-desc { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+		.security-note { margin-top: 20px; padding: 12px; border-left: 3px solid var(--gold); background: var(--warning); color: #70552f; font-size: 10px; line-height: 1.65; }
+		.page-footer { padding-top: 20px; display: flex; justify-content: space-between; gap: 14px; color: #818c86; font-size: 10px; }
+
+		@keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+		@keyframes pulse { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+		@media (max-width: 900px) {
+			.workspace { grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
+			.page { padding: 28px 18px 36px; }
+			.topbar { padding: 0 18px; }
+		}
+		@media (max-width: 700px) {
+			.topbar { height: 62px; }
+			.topbar-right { gap: 0; }
+			.topbar-right > span:last-child { display: none; }
+			.page { padding: 24px 13px; }
+			.page-heading { align-items: start; }
+			.page-heading h1 { font-size: 24px; }
+			.heading-note { max-width: 290px; font-size: 12px; }
+			.office-hours { display: none; }
+			.workspace { grid-template-columns: 1fr; }
+			.chat-panel { grid-template-rows: auto minmax(390px, 1fr) auto; }
+			.messages { padding: 16px 13px; }
+			.chat-header { padding: 13px; }
+			.quiet-button { padding: 0 9px; }
+			.side-panel { padding: 17px 14px; }
+			.topic-list { grid-template-columns: 1fr 1fr; }
+			.service-list { grid-template-columns: 1fr 1fr; }
+			.message-body { max-width: 84%; }
+			.composer { padding: 12px; }
+			.page-footer { flex-direction: column; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			*, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+		}
+
+		/* ===== OWASP 安全中心樣式 (保持原樣) ===== */
+		#securityApp { --sec-ink: #17251f; --sec-muted: #68766e; --sec-line: #dce3dc; --sec-lime: #d9f36a; min-height: 100vh; overflow: auto; background: #f4f6f1; color: var(--sec-ink); font-family: "DM Sans", "Noto Sans TC", sans-serif; }
+		#securityApp[hidden] { display: none !important; }
+		#securityApp button, #securityApp input { font: inherit; }
+		#securityApp .security-topbar { position: sticky; z-index: 3; top: 0; display: flex; min-height: 68px; align-items: center; justify-content: space-between; padding: 0 clamp(18px, 5vw, 72px); border-bottom: 1px solid var(--sec-line); background: rgba(250,251,248,.94); backdrop-filter: blur(12px); }
+		#securityApp .security-top-left { display: flex; align-items: center; gap: 12px; }
+		#securityApp .menu-toggle { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--sec-line); background: white; cursor: pointer; }
+		#securityApp .menu-toggle:hover { background: #edf2ec; }
+		#securityApp .menu-toggle svg { width: 18px; height: 18px; }
+		#securityApp .menu-backdrop { position: fixed; z-index: 5; inset: 0; background: rgba(15,31,23,.35); opacity: 0; pointer-events: none; transition: opacity .2s; }
+		#securityApp .menu-backdrop.open { opacity: 1; pointer-events: auto; }
+		#securityApp .section-drawer { position: fixed; z-index: 6; inset: 0 auto 0 0; display: flex; width: min(300px, 86vw); flex-direction: column; padding: 23px 17px; border-right: 1px solid var(--sec-line); background: #fbfcf9; box-shadow: 12px 0 32px rgba(18,39,27,.12); transform: translateX(-105%); transition: transform .22s ease; }
+		#securityApp .section-drawer.open { transform: translateX(0); }
+		#securityApp .drawer-heading { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 23px; font-size: 13px; font-weight: 700; }
+		#securityApp .drawer-close { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--sec-line); background: white; cursor: pointer; }
+		#securityApp .drawer-label { margin: 0 8px 8px; color: #89958c; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+		#securityApp .drawer-links { display: grid; gap: 4px; }
+		#securityApp .drawer-links button { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border: 0; background: transparent; color: #435248; text-align: left; font-size: 11px; cursor: pointer; }
+		#securityApp .drawer-links button:hover, #securityApp .drawer-links button.active { background: #eaf1e9; color: #244536; }
+		#securityApp .drawer-links span { width: 29px; color: #8a9a8d; font-size: 9px; font-weight: 700; }
+		#securityApp .drawer-rule { height: 1px; margin: 17px 5px; background: var(--sec-line); }
+		#securityApp .drawer-note { margin: auto 8px 0; color: #839087; font-size: 10px; line-height: 1.6; }
+		#securityApp .security-brand { display: flex; align-items: center; gap: 11px; font-size: 13px; font-weight: 700; }
+		#securityApp .security-mark { display: grid; width: 32px; height: 32px; place-items: center; background: #193d30; color: var(--sec-lime); font-size: 12px; }
+		#securityApp .security-nav { display: flex; align-items: center; gap: 18px; color: var(--sec-muted); font-size: 11px; }
+		#securityApp .security-content { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 38px 0 56px; }
+		#securityApp .security-hero { position: relative; display: grid; min-height: 255px; grid-template-columns: minmax(0, 1fr) 240px; align-items: center; gap: 30px; overflow: hidden; padding: 36px 42px; background: #193d30; color: white; }
+		#securityApp .security-hero::after { position: absolute; right: 205px; bottom: -95px; width: 240px; height: 240px; border: 1px solid rgba(217,243,106,.3); border-radius: 50%; box-shadow: 0 0 0 28px rgba(217,243,106,.035), 0 0 0 58px rgba(217,243,106,.035); content: ""; }
+		#securityApp .security-kicker { color: var(--sec-lime); font-size: 10px; font-weight: 700; letter-spacing: 1.3px; }
+		#securityApp .security-hero h1 { max-width: 680px; margin: 12px 0 10px; font-size: clamp(26px, 4vw, 42px); line-height: 1.18; }
+		#securityApp .security-hero p { max-width: 620px; margin: 0; color: #ccdbd1; font-size: 13px; line-height: 1.8; }
+		#securityApp .hero-index { position: relative; z-index: 1; justify-self: end; color: var(--sec-lime); font-size: 74px; font-weight: 600; line-height: 1; }
+		#securityApp .hero-index span { display: block; margin-top: 9px; color: #c3d2c8; font-size: 10px; font-weight: 500; letter-spacing: 1px; text-align: right; }
+		#securityApp .section-bar { display: flex; align-items: end; justify-content: space-between; gap: 15px; margin: 32px 0 15px; }
+		#securityApp .section-bar h2 { margin: 0; font-size: 19px; }
+		#securityApp .section-bar p { margin: 0; color: var(--sec-muted); font-size: 11px; }
+		#securityApp .risk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+		#securityApp .risk-card { display: flex; min-height: 156px; flex-direction: column; padding: 14px; border: 1px solid var(--sec-line); background: #fff; transition: transform .18s, border-color .18s; }
+		#securityApp .risk-card:hover { transform: translateY(-3px); border-color: #88a392; }
+		#securityApp .risk-number { color: #64816e; font-size: 10px; font-weight: 700; }
+		#securityApp .risk-card h3 { margin: 13px 0 7px; font-size: 13px; line-height: 1.45; }
+		#securityApp .risk-card p { margin: 0; color: var(--sec-muted); font-size: 10px; line-height: 1.65; }
+		#securityApp .security-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 19px; color: #829087; font-size: 10px; line-height: 1.6; }
+		#securityApp .security-footer a { color: #315c45; }
+		@media (max-width: 900px) { #securityApp .risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+		@media (max-width: 560px) { #securityApp .security-topbar { min-height: 58px; padding: 0 14px; } #securityApp .security-content { width: calc(100% - 28px); padding-top: 18px; } #securityApp .security-hero { min-height: 240px; grid-template-columns: 1fr 70px; gap: 10px; padding: 24px 19px; } #securityApp .security-hero h1 { font-size: 27px; } #securityApp .security-hero p { font-size: 11px; } #securityApp .hero-index { font-size: 43px; } #securityApp .hero-index span { font-size: 8px; } #securityApp .risk-grid { gap: 7px; } #securityApp .risk-card { min-height: 160px; padding: 11px; } #securityApp .risk-card h3 { font-size: 12px; } #securityApp .security-footer { flex-direction: column; } }
+	</style>
+</head>
+<body>
+	<!-- 區塊 1：OWASP 模型安全中心 (保持原樣) -->
+	<div id="securityApp">
+		<div class="menu-backdrop" id="menuBackdrop"></div>
+		<aside class="section-drawer" id="sectionDrawer" aria-label="工作區分類選單" aria-hidden="true">
+			<div class="drawer-heading"><span>工作區分類</span><button class="drawer-close" type="button" id="closeSectionMenu" aria-label="關閉選單">×</button></div>
+			<div class="drawer-label">安全與治理</div>
+			<nav class="drawer-links" aria-label="安全工具"><button type="button" data-route="overview" class="active"><span>01</span>OWASP LLM 十大風險</button></nav>
+			<div class="drawer-rule"></div>
+			<div class="drawer-label">金融工作區</div>
+			<nav class="drawer-links" aria-label="金融工具"><button type="button" data-route="finance"><span>02</span>金融聊天助理</button></nav>
+			<div class="drawer-note">集中瀏覽模型安全風險與金融對話。</div>
+		</aside>
+		<header class="security-topbar">
+			<div class="security-top-left"><button class="menu-toggle" type="button" id="openSectionMenu" aria-label="開啟工作區分類選單" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button><div class="security-brand"><span class="security-mark">AI</span><span>模型安全中心</span></div></div>
+			<nav class="security-nav" aria-label="安全中心導覽"><span>OWASP FOUNDATION · 2025</span></nav>
+		</header>
+		<main class="security-content">
+			<section class="overview-view" id="overviewView">
+				<div class="security-hero"><div><div class="security-kicker">LLM APPLICATION SECURITY</div><h1>理解風險，<br>讓生成式 AI 更安全。</h1><p>OWASP Top 10 for LLM Applications 彙整大型語言模型應用常見的安全風險，協助開發與治理團隊建立防護優先順序。</p></div><div class="hero-index">10<span>KEY RISKS · 2025</span></div></div>
+				<div class="section-bar"><div><h2>LLM 十大安全風險</h2><p style="margin-top:5px">由提示、資料到代理權限，快速掌握主要攻擊面。</p></div><p>OWASP Top 10 for LLM Applications · 2025</p></div>
+				<div class="risk-grid" id="riskGrid" aria-label="OWASP LLM 十大風險"></div>
+				<footer class="security-footer"><span>此頁為安全教育與管理介面示範，不構成完整安全稽核。</span><a href="https://genai.owasp.org/llm-top-10/" target="_blank" rel="noreferrer">查看 OWASP 官方資料 ↗</a></footer>
+			</section>
+		</main>
+	</div>
+
+	<!-- 區塊 2：金融對話頁面 (改為 11.html 澄川銀行風格) -->
+	<div class="app" hidden aria-hidden="true">
+		<aside class="sidebar" id="sidebar" aria-label="工作區分類選單">
+			<div class="drawer-heading"><span>工作區分類</span><button class="drawer-close" type="button" id="closeChatSidebar" aria-label="關閉選單">×</button></div>
+			<div class="drawer-label">安全與治理</div>
+			<nav class="drawer-links" aria-label="安全工具">
+				<button type="button" id="openSecurityFromChat"><span>01</span>OWASP LLM 十大風險</button>
+			</nav>
+			<div class="drawer-rule"></div>
+			<div class="drawer-label">金融工作區</div>
+			<nav class="drawer-links" aria-label="金融工具">
+				<button type="button" class="active"><span>02</span>金融聊天助理</button>
+			</nav>
+			<div class="drawer-note">集中瀏覽模型安全風險與金融對話。</div>
+		</aside>
+		<div class="backdrop" id="backdrop"></div>
+
+		<header class="topbar">
+			<div class="topbar-left">
+				<button class="mobile-menu" id="menuButton" type="button" aria-label="開啟工作區選單" aria-expanded="false" title="開啟工作區選單">
+					<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+				</button>
+				<div class="brand" aria-label="澄川銀行智能客服">
+					<div class="brand-mark" aria-hidden="true">澄</div>
+					<div>
+						<div class="brand-name">澄川銀行</div>
+						<div class="brand-sub">CHENG CHUAN BANK</div>
+					</div>
+				</div>
+			</div>
+			<div class="topbar-right">
+				<span class="secure-label"><span class="secure-dot"></span>安全加密連線</span>
+				<span>智能客服中心</span>
+			</div>
+		</header>
+
+		<main class="page">
+			<section class="page-heading" aria-labelledby="pageTitle">
+				<div>
+					<p class="eyebrow">CUSTOMER SERVICE</p>
+					<h1 id="pageTitle">智能客服中心</h1>
+					<p class="heading-note">您好，歡迎使用澄川銀行線上服務。請問今天需要什麼協助？</p>
+				</div>
+				<div class="office-hours">線上服務 每日 24 小時</div>
+			</section>
+
+			<div class="workspace">
+				<section class="chat-panel" aria-label="客服對話">
+					<div class="chat-header">
+						<div class="agent">
+							<div class="agent-avatar" aria-hidden="true">川</div>
+							<div>
+								<div class="agent-name">金融服務智能助理</div>
+								<div class="agent-status"><span class="status-dot" id="statusDot"></span><span id="statusText">正在確認服務連線</span></div>
+							</div>
+						</div>
+						<div class="header-actions">
+							<button class="quiet-button" id="exportButton" type="button" title="下載目前對話紀錄">匯出對話</button>
+							<button class="quiet-button" id="newChatButton" type="button" title="清除目前對話並重新開始">重新開始</button>
+						</div>
+					</div>
+
+					<div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions text">
+						<div class="date-divider"><span id="todayLabel"></span></div>
+						<div class="message-row">
+							<div class="message-avatar" aria-hidden="true">川</div>
+							<div class="message-body">
+								<p class="message-label">金融服務智能助理</p>
+								<div class="message-bubble">您好，我是澄川銀行智能客服。您可以詢問帳戶服務、信用卡、轉帳與金融安全等一般資訊，我會盡力為您說明。</div>
+								<p class="message-time">現在</p>
+							</div>
+						</div>
+					</div>
+
+					<form class="composer" id="chatForm">
+						<div class="composer-box">
+							<textarea id="messageInput" maxlength="1000" rows="2" aria-label="輸入您的問題" placeholder="請輸入問題，例如：信用卡帳單如何繳費？"></textarea>
+							<div class="composer-tools">
+								<span class="input-hint">Enter 傳送，Shift + Enter 換行</span>
+								<div style="display:flex;align-items:center;gap:12px">
+									<span class="char-count" id="charCount">0 / 1000</span>
+									<button class="send-button" id="sendButton" type="submit" disabled>傳送問題</button>
+								</div>
+							</div>
+						</div>
+						<div class="disclaimer">請勿輸入密碼、簡訊驗證碼或完整金融卡資料。智能客服提供一般資訊，不會代為執行交易。</div>
+					</form>
+				</section>
+
+				<aside class="side-panel" aria-label="服務資訊與常見問題">
+					<section>
+						<h2 class="side-title">常見問題</h2>
+						<p class="side-caption">選擇主題即可開始詢問</p>
+						<div class="topic-list">
+							<button class="topic-button" type="button" data-prompt="信用卡帳單有哪些繳費方式？">信用卡繳費 <span class="topic-arrow">›</span></button>
+							<button class="topic-button" type="button" data-prompt="金融卡遺失時應該如何處理？">金融卡掛失 <span class="topic-arrow">›</span></button>
+							<button class="topic-button" type="button" data-prompt="跨行轉帳的手續費如何計算？">轉帳與手續費 <span class="topic-arrow">›</span></button>
+							<button class="topic-button" type="button" data-prompt="如何辨識常見的金融詐騙訊息？">防詐安全 <span class="topic-arrow">›</span></button>
+						</div>
+					</section>
+
+					<div class="side-rule"></div>
+
+					<section>
+						<h2 class="side-title">服務項目</h2>
+						<p class="side-caption">提供您日常金融服務資訊</p>
+						<div class="service-list">
+							<div class="service-item"><span class="service-mark">存</span><div><div class="service-name">存款與帳戶</div><div class="service-desc">開戶、利率與帳戶服務</div></div></div>
+							<div class="service-item"><span class="service-mark">卡</span><div><div class="service-name">信用卡服務</div><div class="service-desc">帳單、回饋與卡片管理</div></div></div>
+							<div class="service-item"><span class="service-mark">匯</span><div><div class="service-name">轉帳與匯款</div><div class="service-desc">轉帳方式與相關費用</div></div></div>
+							<div class="service-item"><span class="service-mark">盾</span><div><div class="service-name">金融安全</div><div class="service-desc">帳戶保護與詐騙防範</div></div></div>
+						</div>
+					</section>
+
+					<div class="security-note">安全提醒：本客服不會要求您提供網銀密碼、信用卡完整卡號或簡訊驗證碼。遇到可疑來電或訊息，請透過官方管道查證。</div>
+				</aside>
+			</div>
+
+			<footer class="page-footer">
+				<span>© 2026 澄川銀行 智能客服服務</span>
+				<span>本服務提供一般資訊，實際服務內容請以銀行公告為準。</span>
+			</footer>
+		</main>
+	</div>
+
+	<script>
+		(() => {
+			const messages = document.getElementById('messages');
+			const input = document.getElementById('messageInput');
+			const form = document.getElementById('chatForm');
+			const sendButton = document.getElementById('sendButton');
+			const charCount = document.getElementById('charCount');
+			const statusDot = document.getElementById('statusDot');
+			const statusText = document.getElementById('statusText');
+			const conversation = [];
+			let isLoading = false;
+
+			document.getElementById('todayLabel').textContent = new Intl.DateTimeFormat('zh-TW', {
+				year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+			}).format(new Date());
+
+			function setStatus(isOnline, text) {
+				statusDot.classList.toggle('online', isOnline);
+				statusText.textContent = text;
+			}
+
+			async function checkConnection() {
+				try {
+					const response = await fetch('http://127.0.0.1:8000/openapi.json', { signal: AbortSignal.timeout(2500) });
+					setStatus(response.ok, response.ok ? '客服服務已連線' : '客服服務暫時無法使用');
+				} catch {
+					setStatus(false, '尚未連線，請確認 FastAPI 已啟動');
+				}
+			}
+
+			function escapeHtml(value) {
+				return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+			}
+
+			function addMessage(role, content, time = new Date(), maskInfo = null) {
+				const row = document.createElement('div');
+				row.className = `message-row${role === 'user' ? ' user' : ''}`;
+				const avatar = document.createElement('div');
+				avatar.className = 'message-avatar';
+				avatar.setAttribute('aria-hidden', 'true');
+				avatar.textContent = role === 'user' ? '您' : '川';
+
+				const body = document.createElement('div');
+				body.className = 'message-body';
+				const label = document.createElement('p');
+				label.className = 'message-label';
+				label.textContent = role === 'user' ? '您' : '金融服務智能助理';
+				const bubble = document.createElement('div');
+				bubble.className = 'message-bubble';
+				bubble.textContent = content;
+
+				// 若有觸發個資遮蔽，顯示資安防護攔截提示
+				if (role !== 'user' && maskInfo && maskInfo.original !== maskInfo.masked) {
+					const alertBox = document.createElement('div');
+					alertBox.style.cssText = 'margin-top: 10px; padding: 8px 12px; background: #eef7f2; border-left: 3px solid #176c56; border-radius: 4px; font-size: 11px; color: #123c36; white-space: normal;';
+					alertBox.innerHTML = `
+						<strong>🛡️ 系統資安防護攔截：</strong><br>
+						• 原始輸入：${escapeHtml(maskInfo.original)}<br>
+						• 安全送出：<span style="color: #c85d52; font-weight: bold;">${escapeHtml(maskInfo.masked)}</span><br>
+						<span style="color: #687570; font-size: 10px;">( 敏感個資已於本地伺服器安全遮蔽，未外流給 LLM )</span>
+					`;
+					bubble.appendChild(alertBox);
+				}
+
+				const timestamp = document.createElement('p');
+				timestamp.className = 'message-time';
+				timestamp.textContent = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' }).format(time);
+				body.append(label, bubble, timestamp);
+				if (role === 'user') row.append(body, avatar);
+				else row.append(avatar, body);
+				messages.append(row);
+				messages.scrollTop = messages.scrollHeight;
+				conversation.push({ role, content, time });
+			}
+
+			function addTyping() {
+				const row = document.createElement('div');
+				row.className = 'message-row';
+				row.id = 'typingIndicator';
+				const avatar = document.createElement('div');
+				avatar.className = 'message-avatar';
+				avatar.textContent = '川';
+				const typing = document.createElement('div');
+				typing.className = 'typing';
+				typing.setAttribute('aria-label', '客服正在回覆');
+				typing.innerHTML = '<span></span><span></span><span></span>';
+				row.append(avatar, typing);
+				messages.append(row);
+				messages.scrollTop = messages.scrollHeight;
+			}
+
+			function updateComposer() {
+				charCount.textContent = `${input.value.length} / 1000`;
+				sendButton.disabled = isLoading || !input.value.trim();
+			}
+
+			async function requestChatApi(message) {
+				const endpoints = ['http://127.0.0.1:8000/api/chat', 'http://127.0.0.1:8000/chat', '/chat'];
+				let lastError = null;
+				for (const url of endpoints) {
+					try {
+						const response = await fetch(url, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ message })
+						});
+						if (response.status === 404) continue;
+						const data = await response.json();
+						if (!response.ok) throw new Error(data.detail || '客服服務暫時無法使用，請稍後再試。');
+						return data;
+					} catch (err) {
+						lastError = err;
+					}
+				}
+				throw lastError || new Error('連線失敗，請確認 FastAPI 與 Ollama 已啟動。');
+			}
+
+			async function sendMessage(text = input.value) {
+				const message = text.trim();
+				if (!message || isLoading) return;
+				addMessage('user', message);
+				input.value = '';
+				isLoading = true;
+				updateComposer();
+				addTyping();
+
+				try {
+					const data = await requestChatApi(message);
+					document.getElementById('typingIndicator')?.remove();
+					const maskedText = data.masked ?? data.filtered_input ?? message;
+					const origText = data.original ?? message;
+					addMessage('ai', data.reply || '目前無法取得回覆，請稍後再試。', new Date(), {
+						original: origText,
+						masked: maskedText
+					});
+					setStatus(true, '客服服務已連線');
+				} catch (error) {
+					document.getElementById('typingIndicator')?.remove();
+					addMessage('ai', error.message || '連線失敗，請確認 FastAPI 與 Ollama 已啟動。');
+					setStatus(false, '客服服務連線異常');
+				} finally {
+					isLoading = false;
+					updateComposer();
+					input.focus();
+				}
+			}
+
+			input.addEventListener('input', updateComposer);
+			input.addEventListener('keydown', (event) => {
+				if (event.key === 'Enter' && !event.shiftKey) {
+					event.preventDefault();
+					sendMessage();
+				}
+			});
+			form.addEventListener('submit', (event) => {
+				event.preventDefault();
+				sendMessage();
+			});
+			document.querySelectorAll('[data-prompt]').forEach((button) => {
+				button.addEventListener('click', () => sendMessage(button.dataset.prompt));
+			});
+			document.getElementById('newChatButton').addEventListener('click', () => {
+				if (isLoading) return;
+				if (conversation.length && !window.confirm('確定清除目前對話並重新開始嗎？')) return;
+				messages.querySelectorAll('.message-row').forEach((row) => row.remove());
+				conversation.length = 0;
+				addMessage('ai', '您好，我是澄川銀行智能客服。您可以詢問帳戶服務、信用卡、轉帳與金融安全等一般資訊，我會盡力為您說明。');
+				input.value = '';
+				updateComposer();
+			});
+			document.getElementById('exportButton').addEventListener('click', () => {
+				if (!conversation.length) {
+					window.alert('目前沒有可匯出的對話內容。');
+					return;
+				}
+				const transcript = conversation.map(({ role, content, time }) => {
+					const speaker = role === 'user' ? '您' : '金融服務智能助理';
+					const timestamp = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(time);
+					return `[${timestamp}] ${speaker}\n${content}`;
+				}).join('\n\n');
+				const link = document.createElement('a');
+				link.href = URL.createObjectURL(new Blob([transcript], { type: 'text/plain;charset=utf-8' }));
+				link.download = `澄川銀行客服對話-${new Date().toISOString().slice(0, 10)}.txt`;
+				link.click();
+				URL.revokeObjectURL(link.href);
+			});
+
+			// 對話頁側邊選單開關
+			const sidebar = document.querySelector('#sidebar');
+			const backdrop = document.querySelector('#backdrop');
+			const menuButton = document.querySelector('#menuButton');
+			function closeSidebar() {
+				sidebar.classList.remove('open');
+				backdrop.classList.remove('open');
+				menuButton.setAttribute('aria-expanded', 'false');
+			}
+			menuButton.addEventListener('click', () => {
+				const isOpen = sidebar.classList.toggle('open');
+				backdrop.classList.toggle('open', isOpen);
+				menuButton.setAttribute('aria-expanded', String(isOpen));
+			});
+			document.querySelector('#closeChatSidebar').addEventListener('click', closeSidebar);
+			backdrop.addEventListener('click', closeSidebar);
+
+			updateComposer();
+			checkConnection();
+		})();
+	</script>
+
+	<!-- OWASP 十大風險資料與路由切換 (保持原樣) -->
+	<script>
+		const risks = [
+			['LLM01', '提示注入', '惡意指令可能覆蓋模型原有規則，或操控模型執行非預期任務。'],
+			['LLM02', '敏感資訊揭露', '模型可能在回應中暴露個資、機密資料、憑證或訓練資訊。'],
+			['LLM03', '供應鏈風險', '模型、資料集、外掛與第三方服務的弱點可能傳入應用程式。'],
+			['LLM04', '資料與模型投毒', '被竄改的訓練或檢索資料可能影響模型行為與輸出品質。'],
+			['LLM05', '不當輸出處理', '未驗證的模型輸出若直接交給下游系統，可能造成注入或執行風險。'],
+			['LLM06', '過度代理權限', '代理若取得過多工具或權限，錯誤指令可能擴大為高影響操作。'],
+			['LLM07', '系統提示詞洩漏', '提示詞中的內部指令、策略或機密可能被誘導透露。'],
+			['LLM08', '向量與嵌入弱點', '檢索資料污染、存取控制錯誤或向量庫隔離不足可能洩漏資訊。'],
+			['LLM09', '錯誤資訊', '模型可能產生看似可信但不正確的內容，進而誤導決策或流程。'],
+			['LLM10', '無限制消耗', '缺乏用量與成本限制可能導致資源耗盡、拒絕服務或預算超支。']
+		];
+		const riskGrid = document.querySelector('#riskGrid');
+		riskGrid.innerHTML = risks.map(([number, title, description]) => `<article class="risk-card"><span class="risk-number">${number}</span><h3>${title}</h3><p>${description}</p></article>`).join('');
+	</script>
+	<script>
+		const financeWorkspace = document.querySelector('.app');
+		const securityWorkspace = document.querySelector('#securityApp');
+		const sectionDrawer = document.querySelector('#sectionDrawer');
+		const menuBackdrop = document.querySelector('#menuBackdrop');
+		const menuToggle = document.querySelector('#openSectionMenu');
+		function setSectionMenu(open) {
+			sectionDrawer.classList.toggle('open', open);
+			menuBackdrop.classList.toggle('open', open);
+			sectionDrawer.setAttribute('aria-hidden', String(!open));
+			menuToggle.setAttribute('aria-expanded', String(open));
+		}
+		menuToggle.addEventListener('click', () => setSectionMenu(true));
+		document.querySelector('#closeSectionMenu').addEventListener('click', () => setSectionMenu(false));
+		menuBackdrop.addEventListener('click', () => setSectionMenu(false));
+		document.querySelectorAll('[data-route]').forEach(button => button.addEventListener('click', () => {
+			setSectionMenu(false);
+			const route = button.dataset.route;
+			if (route === 'finance') {
+				securityWorkspace.hidden = true;
+				financeWorkspace.hidden = false;
+				window.scrollTo({ top: 0, behavior: 'smooth' });
+				return;
+			}
+			financeWorkspace.hidden = true;
+			securityWorkspace.hidden = false;
+			document.querySelectorAll('[data-route]').forEach(link => link.classList.toggle('active', link.dataset.route === route));
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		}));
+		document.querySelector('#openSecurityFromChat').addEventListener('click', () => {
+			document.querySelector('#sidebar').classList.remove('open');
+			document.querySelector('#backdrop').classList.remove('open');
+			financeWorkspace.hidden = true;
+			securityWorkspace.hidden = false;
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		});
+		document.addEventListener('keydown', event => { if (event.key === 'Escape') setSectionMenu(false); });
+	</script>
+</body>
+</html>
